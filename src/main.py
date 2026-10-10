@@ -15,7 +15,13 @@ from src.routes.user import user_bp
 from src.routes.note import note_bp
 from src.models.note import Note
 
-app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
+# On Vercel, static assets are served from the `public/` directory (CDN).
+# Fall back to the legacy `src/static` folder when it is present (local dev).
+PUBLIC_DIR = os.path.join(ROOT_DIR, 'public')
+LEGACY_STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+STATIC_DIR = PUBLIC_DIR if os.path.isdir(PUBLIC_DIR) else LEGACY_STATIC_DIR
+
+app = Flask(__name__, static_folder=STATIC_DIR)
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
 # Enable CORS for all routes
@@ -24,8 +30,15 @@ CORS(app)
 # register blueprints
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(note_bp, url_prefix='/api')
-# configure database to use repository-root `database/app.db`
-DB_PATH = os.path.join(ROOT_DIR, 'database', 'app.db')
+
+# Configure the database path.
+# Vercel's filesystem is read-only except for /tmp, so use that when deployed.
+DB_PATH = os.environ.get('DATABASE_PATH')
+if not DB_PATH:
+    if os.environ.get('VERCEL'):
+        DB_PATH = os.path.join('/tmp', 'app.db')
+    else:
+        DB_PATH = os.path.join(ROOT_DIR, 'database', 'app.db')
 # ensure database directory exists
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
