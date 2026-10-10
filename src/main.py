@@ -31,22 +31,49 @@ CORS(app)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(note_bp, url_prefix='/api')
 
-# Configure the database path.
-# Vercel's filesystem is read-only except for /tmp, so use that when deployed.
-DB_PATH = os.environ.get('DATABASE_PATH')
-if not DB_PATH:
-    if os.environ.get('VERCEL'):
-        DB_PATH = os.path.join('/tmp', 'app.db')
-    else:
-        DB_PATH = os.path.join(ROOT_DIR, 'database', 'app.db')
-# ensure database directory exists
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+def _normalize_db_uri(uri):
+    """Normalize a Postgres URL so SQLAlchemy 2.x uses the psycopg (v3) driver."""
+    if uri.startswith('postgres://'):
+        uri = 'postgresql://' + uri[len('postgres://'):]
+    if uri.startswith('postgresql://'):
+        uri = 'postgresql+psycopg://' + uri[len('postgresql://'):]
+    return uri
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_PATH}"
+
+# Prefer an external database (Neon / Vercel Postgres) when one is configured.
+# Vercel's local filesystem is read-only except /tmp, so a local SQLite file
+# cannot persist across restarts.
+DATABASE_URL = (
+    os.environ.get('DATABASE_URL')
+    or os.environ.get('POSTGRES_URL')
+    or os.environ.get('POSTGRES_PRISMA_URL')
+)
+
+if DATABASE_URL:
+    app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_db_uri(DATABASE_URL)
+    # Serverless-friendly connection handling for hosted Postgres.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
+else:
+    DB_PATH = os.environ.get('DATABASE_PATH')
+    if not DB_PATH:
+        if os.environ.get('VERCEL'):
+            DB_PATH = os.path.join('/tmp', 'app.db')
+        else:
+            DB_PATH = os.path.join(ROOT_DIR, 'database', 'app.db')
+    # ensure database directory exists
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DB_PATH}"
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as exc:  # keep the app bootable if the DB is unreachable
+        app.logger.warning('Database initialization failed: %s', exc)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
