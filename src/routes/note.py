@@ -14,8 +14,11 @@ TRANSLATION_LANGUAGES = {
     'fr': 'French',
 }
 TRANSLATION_PROMPT_PATH = Path(__file__).resolve().parents[1] / 'prompts' / 'translation.txt'
-OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-DEFAULT_TRANSLATION_MODEL = 'deepseek/deepseek-v4-flash-0731'
+OPENROUTER_URL = os.environ.get('OPENROUTER_URL', 'https://openrouter.ai/api/v1/chat/completions')
+# Ensure the URL points to the chat completions endpoint
+if not OPENROUTER_URL.rstrip('/').endswith('chat/completions'):
+    OPENROUTER_URL = OPENROUTER_URL.rstrip('/') + '/chat/completions'
+DEFAULT_TRANSLATION_MODEL = os.environ.get('DEFAULT_TRANSLATION_MODEL', 'deepseek/deepseek-v4-flash-0731')
 
 
 @note_bp.route('/notes', methods=['GET'])
