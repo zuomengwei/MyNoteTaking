@@ -8,6 +8,7 @@ A modern, responsive web application for managing personal notes with a beautifu
 - **Edit Notes**: Update existing notes with real-time editing
 - **Delete Notes**: Remove notes you no longer need
 - **Search Notes**: Find notes quickly by searching titles and content
+- **Translate Notes**: Preview translations into Simplified Chinese, Japanese, or French before explicitly replacing a note
 - **Auto-save**: Notes are automatically saved as you type
 - **Responsive Design**: Works perfectly on desktop and mobile devices
 - **Modern UI**: Beautiful gradient design with smooth animations
@@ -79,12 +80,21 @@ notetaking-app/
    pip install -r requirements.txt
    ```
 
-4. **Run the application**
+4. **Configure translation**
+   Set `OPENROUTER_API_KEY` in the project-root `.env` file. The key is only read by Flask on the server and is never sent to the browser.
+   ```dotenv
+   OPENROUTER_API_KEY=your_rotated_openrouter_api_key
+   # Optional; defaults to deepseek/deepseek-v4-flash-0731
+   OPENROUTER_MODEL=deepseek/deepseek-v4-flash-0731
+   ```
+   The `.env` file is ignored by Git. Translation sends the note title and content to OpenRouter for processing.
+
+5. **Run the application**
    ```bash
    python src/main.py
    ```
 
-5. **Access the application**
+6. **Access the application**
    - Open your browser and go to `http://localhost:5001`
 
 ## 📡 API Endpoints
@@ -96,6 +106,7 @@ notetaking-app/
 - `PUT /api/notes/<id>` - Update a note
 - `DELETE /api/notes/<id>` - Delete a note
 - `GET /api/notes/search?q=<query>` - Search notes
+- `POST /api/notes/translate` - Translate a title and content without saving changes. Provide JSON with `title`, `content`, and a `language` code (`zh-CN`, `ja`, or `fr`).
 
 ### Request/Response Format
 ```json
@@ -205,4 +216,3 @@ Potential improvements for future versions:
 ---
 
 **Built with ❤️ using Flask, SQLite, and modern web technologies**
-

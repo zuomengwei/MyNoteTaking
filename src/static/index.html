@@ -14,7 +14,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0d6efd 0%, #63a4ff 100%);
             min-height: 100vh;
             color: #333;
         }
@@ -243,6 +243,42 @@
             border-color: #667eea;
         }
 
+        .translation-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: end;
+            gap: 10px;
+        }
+
+        .translation-controls .form-group {
+            flex: 1;
+            min-width: 180px;
+            margin-bottom: 0;
+        }
+
+        .translation-preview {
+            margin-top: 20px;
+            padding: 18px;
+            border: 1px solid #dbe3f0;
+            border-radius: 10px;
+            background: #f8f9fc;
+        }
+
+        .translation-preview h3 {
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .translation-preview p {
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            line-height: 1.6;
+        }
+
+        .translation-preview .translated-content {
+            margin: 8px 0 16px;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -361,6 +397,26 @@
                         <label class="form-label" for="noteContent">Content</label>
                         <textarea class="form-textarea" id="noteContent" placeholder="Start writing your note..."></textarea>
                     </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="translationLanguage">Translate this note</label>
+                        <div class="translation-controls">
+                            <div class="form-group">
+                                <select class="form-input" id="translationLanguage">
+                                    <option value="zh-CN">Simplified Chinese</option>
+                                    <option value="ja">Japanese</option>
+                                    <option value="fr">French</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-save" id="translateBtn" type="button">Translate</button>
+                        </div>
+                    </div>
+
+                    <section class="translation-preview" id="translationPreview" aria-live="polite" style="display: none;">
+                        <h3 id="translatedTitle"></h3>
+                        <p class="translated-content" id="translatedContent"></p>
+                        <button class="btn btn-save" id="replaceTranslationBtn" type="button">Replace note with translation</button>
+                    </section>
                 </div>
 
                 <div class="empty-state" id="emptyState">
@@ -389,12 +445,15 @@
                 document.getElementById('newNoteBtn').addEventListener('click', () => this.createNewNote());
                 document.getElementById('saveBtn').addEventListener('click', () => this.saveNote());
                 document.getElementById('deleteBtn').addEventListener('click', () => this.deleteNote());
+                document.getElementById('translateBtn').addEventListener('click', () => this.translateNote());
+                document.getElementById('replaceTranslationBtn').addEventListener('click', () => this.replaceWithTranslation());
                 document.getElementById('searchBox').addEventListener('input', (e) => this.searchNotes(e.target.value));
                 
                 // Auto-save on content change (debounced)
                 let saveTimeout;
                 const autoSave = () => {
                     clearTimeout(saveTimeout);
+                    this.resetTranslationPreview();
                     saveTimeout = setTimeout(() => {
                         if (this.currentNote && this.currentNote.id) {
                             this.saveNote(true);
@@ -448,6 +507,7 @@
 
                 this.currentNote = note;
                 this.showEditor();
+                this.resetTranslationPreview();
                 this.renderNotesList(); // Re-render to update active state
                 
                 document.getElementById('noteTitle').value = note.title || '';
@@ -465,6 +525,7 @@
                 };
                 
                 this.showEditor();
+                this.resetTranslationPreview();
                 document.getElementById('noteTitle').value = '';
                 document.getElementById('noteContent').value = '';
                 document.getElementById('editorTitle').textContent = 'New Note';
@@ -488,6 +549,61 @@
                 document.getElementById('editorActions').style.display = 'none';
                 document.getElementById('editorTitle').textContent = 'Select a note to edit';
                 this.currentNote = null;
+                this.resetTranslationPreview();
+            }
+
+            resetTranslationPreview() {
+                this.translatedNote = null;
+                document.getElementById('translationPreview').style.display = 'none';
+            }
+
+            async translateNote() {
+                const title = document.getElementById('noteTitle').value;
+                const content = document.getElementById('noteContent').value;
+                const language = document.getElementById('translationLanguage').value;
+                if (!title.trim() && !content.trim()) {
+                    this.showMessage('Enter a title or note content to translate.', 'error');
+                    return;
+                }
+
+                const translateButton = document.getElementById('translateBtn');
+                translateButton.disabled = true;
+                this.showMessage('Translating note...', 'loading');
+                try {
+                    const response = await fetch('/api/notes/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, content, language })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Translation failed');
+                    }
+                    if (
+                        title !== document.getElementById('noteTitle').value ||
+                        content !== document.getElementById('noteContent').value
+                    ) {
+                        throw new Error('The note changed during translation. Translate it again.');
+                    }
+
+                    this.translatedNote = result;
+                    document.getElementById('translatedTitle').textContent = result.title;
+                    document.getElementById('translatedContent').textContent = result.content;
+                    document.getElementById('translationPreview').style.display = 'block';
+                    this.hideMessage();
+                } catch (error) {
+                    this.showMessage(`Error translating note: ${error.message}`, 'error');
+                } finally {
+                    translateButton.disabled = false;
+                }
+            }
+
+            async replaceWithTranslation() {
+                if (!this.translatedNote) return;
+                document.getElementById('noteTitle').value = this.translatedNote.title;
+                document.getElementById('noteContent').value = this.translatedNote.content;
+                this.resetTranslationPreview();
+                await this.saveNote();
             }
 
             async saveNote(isAutoSave = false) {
@@ -597,7 +713,7 @@
 
             showMessage(message, type) {
                 const messageArea = document.getElementById('messageArea');
-                messageArea.innerHTML = `<div class="${type}">${message}</div>`;
+                messageArea.innerHTML = `<div class="${type}">${this.escapeHtml(message)}</div>`;
                 
                 if (type === 'success') {
                     setTimeout(() => this.hideMessage(), 3000);
@@ -637,4 +753,3 @@
     </script>
 </body>
 </html>
-
